@@ -31,15 +31,17 @@ SELECT departure_airport_id,
        COUNT(DISTINCT company_id) as company_count
 FROM Flight
 GROUP BY departure_airport_id, arrival_airport_id
-HAVING COUNT(DISTINCT company_id) > 3
+HAVING COUNT(DISTINCT company_id) > 1
 """), sep="\n")
 
 print("5 количество авиарейсов, выполняемых между каждой парой аэропортов")
 print(*cursor.execute("""
-SELECT departure_airport_id,
-       arrival_airport_id,
-       COUNT(*) as flight_count
-FROM Flight
+SELECT d.name,
+       a.name,
+       COUNT(*)
+FROM Flight f
+JOIN Airport d on f.departure_airport_id = d.airport_id 
+JOIN Airport a on f.arrival_airport_id = a.airport_id 
 GROUP BY departure_airport_id, arrival_airport_id
 """), sep="\n")
 
@@ -62,14 +64,13 @@ HAVING COUNT(f.flight_id) = (
 print("7 авиакомпании, не работающие в Екатеринбурге")
 print(*cursor.execute("""
 SELECT c.name
-FROM Company c
+FROM Company c 
 WHERE c.company_id NOT IN (
-    SELECT DISTINCT f.company_id
+    SELECT f.company_id
     FROM Flight f
-    JOIN Airport a 
-         ON f.departure_airport_id = a.airport_id
-         OR f.arrival_airport_id = a.airport_id
-    WHERE a.city = 'Екатеринбург'
+    JOIN Airport a1 ON f.departure_airport_id = a1.airport_id 
+    JOIN Airport a2 ON f.arrival_airport_id = a2.airport_id
+    WHERE a1.city = 'Екатеринбург' OR a2.city = 'Екатеринбург'
 )
 """), sep="\n")
 
@@ -89,9 +90,11 @@ print("9 авиакомпании, у которых все самолеты о�
 print(*cursor.execute("""
 SELECT c.name
 FROM Company c
-JOIN Aircraft a ON c.company_id = a.company_id
-GROUP BY c.company_id
-HAVING COUNT(DISTINCT a.manufacturer) = 1
+WHERE (
+    SELECT COUNT(DISTINCT manufacturer) 
+    FROM Aircraft a 
+    WHERE a.company_id = c.company_id
+) = 1
 """), sep="\n")
 
 print("""10 самолеты с указанием категории по дальности полета – для
@@ -107,7 +110,7 @@ CASE
     WHEN range_km <= 2500 THEN 'SHORT-HAUL'
     WHEN range_km > 6000 THEN 'LONG-HAUL'
     ELSE 'MEDIUM-HAUL'
-END AS category
+END
 FROM Aircraft
 """), sep="\n")
 
@@ -126,9 +129,12 @@ FROM Aircraft
 
 print("12 самого длительного рейса на основе его продолжительности для авиакомпании «Победа».""")
 print(*cursor.execute("""
-SELECT f.*
+SELECT c.name, a.model, ap1.name, ap2.name, f.duration_minutes
 FROM Flight f
 JOIN Company c ON f.company_id = c.company_id
+JOIN Aircraft a ON f.company_id = a.company_id
+JOIN Airport ap1 ON f.departure_airport_id = ap1.airport_id 
+JOIN Airport ap2 ON f.arrival_airport_id = ap2.airport_id
 WHERE c.name = 'Победа'
 ORDER BY f.duration_minutes DESC
 LIMIT 1
