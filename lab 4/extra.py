@@ -1,6 +1,6 @@
 import sqlite3
 
-conn = sqlite3.connect("airport.db")
+conn = sqlite3.connect("airport3.db")
 cursor = conn.cursor()
 
 # Получить все уникальные модели отсоритированные по вместительности
@@ -9,7 +9,7 @@ print(1)
 print(*cursor.execute("""
 SELECT DISTINCT model, capacity
 FROM Aircraft
-ORDER BY capacity DESC
+ORDER BY capacity ASC
 """), sep="\n")
 
 # самолёты, принадлежащие компаниям из России
@@ -18,24 +18,24 @@ print(2)
 print(*cursor.execute("""
 SELECT model
 FROM Aircraft
-WHERE company_id IN (
+WHERE company_id NOT IN (
     SELECT company_id 
     FROM Company 
     WHERE country = 'Россия'
 )
 """), sep="\n")
 
-# самолёты со средней дальностью
+# самолёты с дальностью полета между 2500 и 6500 км
 # BETWEEN
 print(3)
 print(*cursor.execute("""
 SELECT model, range_km
 FROM Aircraft
-WHERE range_km BETWEEN 2500 AND 6000
+WHERE range_km BETWEEN 2500 AND 6500
 """), sep="\n")
 
 # IS NULL
-# самолёты без указанной дальности
+# самолёты без указанной дальности полета
 print(4)
 print(*cursor.execute("""
 SELECT model
@@ -80,8 +80,8 @@ JOIN Company c ON a.company_id = c.company_id
 GROUP BY a.company_id
 """), sep="\n")
 
-#
-#
+# Увеличить вместительность самолетам компании с самым большим количестом рейсов
+# UPDATE + подзапрос
 print(9)
 print(*cursor.execute("""
 UPDATE Aircraft
@@ -106,7 +106,9 @@ WHERE aircraft_id NOT IN (
 )
 """))
 
-# категория + обработка NULL
+# Если дистанция полета < 1000 или Null, выводим UNDEFINED,
+# Если меньше <= 2500 - SHORT
+# Иначе OTHER
 # CASE + COALESCE
 print(11)
 print(*cursor.execute("""

@@ -1,0 +1,166 @@
+1) Процедура
+вставку с пополнением справочников;
+
+Добавление самолёта с автоматическим созданием компании, если она отсутствует.
+
+CREATE OR REPLACE PROCEDURE add_aircraft_with_company(
+    p_company_name TEXT,
+    p_country TEXT,
+    p_model TEXT,
+    p_manufacturer TEXT,
+    p_range_km INTEGER,
+    p_year INTEGER,
+    p_tail_number TEXT,
+    p_capacity INTEGER
+)
+LANGUAGE plpgsql
+AS
+$$
+DECLARE
+    v_company_id INTEGER;
+BEGIN
+    SELECT company_id
+    INTO v_company_id
+    FROM Company
+    WHERE name = p_company_name;
+
+    IF v_company_id IS NULL THEN
+        INSERT INTO Company(name, country)
+        VALUES (p_company_name, p_country)
+        RETURNING company_id INTO v_company_id;
+    END IF;
+
+    INSERT INTO Aircraft(
+        company_id,
+        model,
+        manufacturer,
+        range_km,
+        year_of_production,
+        tail_number,
+        capacity
+    )
+    VALUES (
+        v_company_id,
+        p_model,
+        p_manufacturer,
+        p_range_km,
+        p_year,
+        p_tail_number,
+        p_capacity
+    );
+END;
+$$;
+
+Вызов
+CALL add_aircraft_with_company(
+    'Ameba',
+    'EU',
+    'A320',
+    'Airbus',
+    6100,
+    2020,
+    'D-AIXX',
+    67
+);
+
+2) процедура 
+удаление с пополнением справочников;
+
+Удаление самолёта с автоматическим удалением компании, 
+если у неё больше не осталось самолётов.
+
+CREATE OR REPLACE PROCEDURE delete_aircraft_and_cleanup(
+    p_aircraft_id INTEGER
+)
+LANGUAGE plpgsql
+AS
+$$
+DECLARE
+    v_company_id INTEGER;
+    v_count INTEGER;
+BEGIN
+    SELECT company_id
+    INTO v_company_id
+    FROM Aircraft
+    WHERE aircraft_id = p_aircraft_id;
+
+    DELETE FROM Aircraft
+    WHERE aircraft_id = p_aircraft_id;
+
+    SELECT COUNT(*)
+    INTO v_count
+    FROM Aircraft
+    WHERE company_id = v_company_id;
+
+    IF v_count = 0 THEN
+        DELETE FROM Company
+        WHERE company_id = v_company_id;
+    END IF;
+END;
+$$;
+
+Вызов
+CALL delete_aircraft_and_cleanup(6);
+
+3) Функция
+вычисление и возврат значения агрегатной функции;
+
+Вычисление средней вместимости самолётов указанной авиакомпании.
+
+CREATE OR REPLACE FUNCTION get_avg_capacity(
+    p_company_id INTEGER
+)
+RETURNS FLOAT
+LANGUAGE plpgsql
+AS
+$$
+DECLARE
+    v_avg FLOAT;
+BEGIN
+    SELECT AVG(capacity)
+    INTO v_avg
+    FROM Aircraft
+    WHERE company_id = p_company_id;
+
+    RETURN v_avg;
+END;
+$$;
+
+Вызов
+SELECT get_avg_capacity(1);
+
+4) Процедура
+формирование статистики во временной таблице;
+
+Формирование статистики по авиакомпаниям во временной таблице 
+(кол-во самолётов, экипажа, рейсов и средняя вместимость).
+
+CREATE OR REPLACE PROCEDURE create_company_statistics()
+LANGUAGE plpgsql
+AS
+$$
+BEGIN
+    DROP TABLE IF EXISTS temp_company_stats;
+
+    CREATE TEMP TABLE temp_company_stats AS
+    SELECT
+        c.company_id,
+        c.name AS company_name,
+        COUNT(DISTINCT a.aircraft_id) AS aircraft_count,
+        COUNT(DISTINCT cr.crew_id) AS crew_count,
+        COUNT(DISTINCT f.flight_id) AS flight_count,
+        AVG(a.capacity) AS avg_capacity
+    FROM Company c
+    
+    JOIN Aircraft a ON c.company_id = a.company_id
+    JOIN Crew cr ON c.company_id = cr.company_id
+    JOIN Flight f ON c.company_id = f.company_id
+    GROUP BY c.company_id;
+END;
+$$;
+
+Вызов
+CALL create_company_statistics();
+
+Просмотр статистики
+SELECT * FROM temp_company_stats;
