@@ -1,0 +1,150 @@
+1. Создать триггеры каждого вида (BEFORE, AFTER) для каждой из
+операций (INSERT, UPDATE, DELETE,) обеспечивающие активную це-
+лостность данных.
+
+** BEFORE INSERT **
+CREATE OR REPLACE FUNCTION before_insert_flight()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.duration_minutes <= 0 THEN
+        RAISE EXCEPTION 'Длительность должна быть больше 0';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_before_insert
+BEFORE INSERT ON Flight
+FOR EACH ROW
+EXECUTE FUNCTION before_insert_flight();
+
+** AFTER INSERT **
+CREATE OR REPLACE FUNCTION after_insert_flight()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE NOTICE 'Добавлен новый рейс';
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_after_insert
+AFTER INSERT ON Flight
+FOR EACH ROW
+EXECUTE FUNCTION after_insert_flight();
+
+** BEFORE UPDATE **
+CREATE OR REPLACE FUNCTION before_update_flight()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.duration_minutes <= 0 THEN
+        RAISE EXCEPTION 'Длительность должна быть больше 0';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_before_update
+BEFORE UPDATE ON Flight
+FOR EACH ROW
+EXECUTE FUNCTION before_update_flight();
+
+** AFTER UPDATE **
+CREATE OR REPLACE FUNCTION after_update_flight()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE NOTICE 'Рейс изменен';
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_after_update
+AFTER UPDATE ON Flight
+FOR EACH ROW
+EXECUTE FUNCTION after_update_flight();
+
+** BEFORE DELETE **
+CREATE OR REPLACE FUNCTION before_delete_flight()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE NOTICE 'Удаление рейса %', OLD.flight_id;
+
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_before_delete
+BEFORE DELETE ON Flight
+FOR EACH ROW
+EXECUTE FUNCTION before_delete_flight();
+
+** AFTER DELETE **
+CREATE OR REPLACE FUNCTION after_delete_flight()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE NOTICE 'Рейс удален';
+
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_after_delete
+AFTER DELETE ON Flight
+FOR EACH ROW
+EXECUTE FUNCTION after_delete_flight();
+
+2. Создать триггер, реализующий вычисления.
+ALTER TABLE Runway
+ADD COLUMN area INTEGER;
+
+CREATE OR REPLACE FUNCTION calculate_runway_area()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.area := NEW.length_meters * NEW.width_meters;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_calculate_area
+BEFORE INSERT OR UPDATE
+ON Runway
+FOR EACH ROW
+EXECUTE FUNCTION calculate_runway_area();
+
+3. Создать триггер, реализующий ведение истории изменений
+в БД.
+
+CREATE TABLE flight_history (
+    id SERIAL PRIMARY KEY,
+    flight_id INTEGER,
+    old_duration INTEGER,
+    new_duration INTEGER,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE OR REPLACE FUNCTION save_history()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO flight_history(
+        flight_id,
+        old_duration,
+        new_duration
+    )
+    VALUES (
+        OLD.flight_id,
+        OLD.duration_minutes,
+        NEW.duration_minutes
+    );
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_save_history
+AFTER UPDATE ON Flight
+FOR EACH ROW
+EXECUTE FUNCTION save_history();
